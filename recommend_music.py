@@ -64,9 +64,9 @@ def get_recommendation(user_age, genre_choice):
         return {"error": f"API 오류: {str(e)}"}
 
 # --- UI 레이아웃 ---
-st.set_page_config(page_title="완벽 장르 음악 추천", page_icon="🎯")
-st.title("🎯 팩트체크 기반 장르 정밀 추천")
-st.write("이미지에서 발생한 논리 오류를 수정한 최신 버전입니다.")
+st.set_page_config(page_title="맞춤형 음악 추천", page_icon="🎯")
+st.title("🎯 AI 기반 맞춤형 음악 추천")
+st.write("AI의 오류로 버그나 정보의 불일치가 있을수도 있습니다.")
 
 with st.sidebar:
     st.header("설정")
@@ -105,3 +105,4 @@ if st.session_state.history:
             st.info(f"📑 **분석**: {rec['reason']}")
             q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
             st.link_button("▶️ 유튜브 확인", f"https://www.youtube.com/results?search_query={q}")
+
