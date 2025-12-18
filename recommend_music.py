@@ -67,7 +67,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
 
 # --- UI 레이아웃 ---
 st.set_page_config(page_title="🎶 AI 음악 추천 시스템", layout="centered")
-st.title("🎵 음악 추천 AI (Gemini 2.0)")
+st.title("🎵 음악 추천 AI")
 
 age = st.number_input("나이를 입력하세요:", min_value=1, max_value=100, value=25)
 genre = st.text_input("선호 장르 (빈 칸은 인기곡 추천):", value="")
@@ -88,3 +88,4 @@ if st.button("음악 추천받기 🌟"):
                 query = urllib.parse.quote_plus(f"{rec['title']} {rec['artist']}")
                 st.markdown(f"[▶️ YouTube에서 보기](https://www.youtube.com/results?search_query={query})")
                 st.divider()
+
