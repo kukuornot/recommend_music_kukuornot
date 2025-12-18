@@ -1,125 +1,71 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+from groq import Groq
 import os
 import json
 import urllib.parse
 
+# 1. Groq API 클라이언트 설정
 try:
-    # 로컬 환경변수(os.getenv)와 배포 서버(st.secrets)에서 키를 순차적으로 찾습니다.
-    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-    client = genai.Client(api_key=api_key)
-except Exception:
-    st.error("Gemini API 키를 설정해주세요. (로컬: 환경변수 / 배포: Streamlit Secrets)")
+    # Streamlit Secrets에 GROQ_API_KEY 라는 이름으로 키를 저장하세요.
+    api_key = st.secrets.get("GROQ_API_KEY")
+    if not api_key:
+        st.error("GROQ_API_KEY가 Secrets에 설정되지 않았습니다.")
+        st.stop()
+    client = Groq(api_key=api_key)
+except Exception as e:
+    st.error(f"설정 오류: {e}")
     st.stop()
+
+def get_recommendation(user_age: int, preferred_genre: str, language_choice: str):
+    genre_input = preferred_genre if preferred_genre.strip() else "최신 트렌디한 인기곡"
     
-def get_recommendation(age: int, preferred_genre: str, language_choice: str):
-    if not preferred_genre.strip():
-        genre_prompt = "전 세계적으로 실시간 인기가 많은 (Popular trending) 곡"
-    else:
-        genre_prompt = preferred_genre
-        
-    if language_choice == "선택 안 함":
-        language_instruction = "추천 이유를 언어에 구애받지 않고 가장 적절하다고 판단되는 언어(예: 한국어, 영어)로 작성해 주세요."
-        output_language = "자유"
-    else:
-        language_instruction = f"추천 이유를 {language_choice}어로 간결하게 설명해 주세요."
-        output_language = language_choice
-    
+    # 정확도를 높이기 위한 상세 프롬프트
     prompt = f"""
-    당신은 전문 음악 큐레이터입니다. 
-    다음 사용자의 정보를 분석하여, 음악 3곡을 추천하고 {language_instruction}
+    당신은 음악 전문가입니다. {user_age}세 사용자가 좋아할 만한 '{genre_input}' 관련 음악 3곡을 추천하세요.
+    반드시 아래 JSON 형식으로만 응답하세요. 다른 설명 문구는 일체 배제하세요.
     
-    응답은 반드시 아래 JSON 스키마를 따르는 하나의 JSON 오브젝트여야 합니다. 
-    다른 설명이나 텍스트를 JSON 바깥에 포함하지 마세요.
-    
-    사용자 정보:
-    - 나이: {age}세
-    - 선호 음악: {genre_prompt}
-    - 추천 언어: {output_language}
-    
-    JSON 스키마:
+    JSON 형식:
     {{
       "recommendations": [
-        {{
-          "title": "노래 제목",
-          "artist": "아티스트 이름",
-          "reason": "추천 이유"
+        {{ 
+          "title": "곡 제목", 
+          "artist": "아티스트", 
+          "reason": "{language_choice}로 작성된 아주 구체적인 추천 이유" 
         }}
       ]
     }}
     """
     
     try:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.7 
-            )
+        # Groq에서 가장 성능이 좋은 모델 사용
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={"type": "json_object"}
         )
         
-        raw_text = response.text.strip()
-        if raw_text.startswith('```json'):
-            raw_text = raw_text[7:].strip()
-        if raw_text.endswith('```'):
-            raw_text = raw_text[:-3].strip()
-
-        return json.loads(raw_text)
-        
-    except json.JSONDecodeError:
-        return {"error": "AI 응답 형식이 올바르지 않습니다. 다시 시도해주세요."}
+        return json.loads(chat_completion.choices[0].message.content)
     except Exception as e:
-        return {"error": f"API 호출 오류: {e}"}
+        return {"error": f"Groq API 호출 중 오류가 발생했습니다: {str(e)}"}
 
-st.set_page_config(page_title="🎶 AI 음악 추천 시스템", layout="centered")
-st.title("🎵 개인화된 음악 추천 AI")
-st.markdown("나이와 선호 장르를 입력하고 추천 언어를 선택하세요.")
+# --- UI 레이아웃 ---
+st.set_page_config(page_title="음악 추천 AI (Groq)", page_icon="⚡")
+st.title("⚡ 초고속 AI 음악 큐레이터")
+st.write("Groq Llama 3.3 모델을 사용하여 실시간으로 음악을 추천합니다.")
 
-with st.form("recommendation_form"):
-    age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
-    genre = st.text_input("선호하는 음악 장르를 입력해 주세요 (빈 칸은 실시간 인기곡 추천):", value="")
-    
-    language_full_list = ['선택 안 함', 'Korean', 'English', 'Japanese', 'Chinese']
-    language_display = {
-        'Korean': 'Korean (한국어)', 
-        'English': 'English (영어)', 
-        'Japanese': 'Japanese (일본어)', 
-        'Chinese': 'Chinese (중국어)',
-        '선택 안 함': '선택 안 함'
-    }
-    
-    selected_language_key = st.selectbox(
-        "추천 결과를 보고 싶은 언어를 선택하세요:",
-        options=language_full_list,
-        format_func=lambda x: language_display[x]
-    )
-    
-    submitted = st.form_submit_button("음악 추천받기 🌟")
+# 입력 섹션
+selected_age = st.number_input("나이를 입력하세요:", min_value=1, max_value=100, value=25, step=1)
+genre = st.text_input("좋아하는 장르나 가수 (예: 뉴진스, 힙합, 재즈):", placeholder="입력하지 않으면 인기곡을 추천합니다.")
+lang = st.selectbox("추천 이유 언어:", ["Korean", "English", "Japanese"])
 
-if submitted:
-    with st.spinner("Gemini가 당신의 취향을 분석하고 음악을 고르는 중입니다..."):
-        recommendation_data = get_recommendation(age, genre, selected_language_key)
+st.divider()
+
+if st.button("음악 추천 받기 🚀", use_container_width=True):
+    with st.spinner("Groq AI가 빛의 속도로 분석 중..."):
+        result = get_recommendation(selected_age, genre, lang)
         
-        if "error" in recommendation_data:
-            st.error(recommendation_data["error"])
+        if "error" in result:
+            st.error(result["error"])
         else:
-            st.success("✅ 추천 완료!")
-            if not genre.strip():
-                st.subheader("🔥 실시간 인기곡 기반 음악 추천 결과:")
-            else:
-                st.subheader("🎧 당신을 위한 음악 추천 결과:")
-                
-            for i, rec in enumerate(recommendation_data.get("recommendations", [])):
-                title = rec.get("title", "제목 없음")
-                artist = rec.get("artist", "아티스트 정보 없음")
-                reason = rec.get("reason", "추천 이유 없음")
-                
-                search_query = f"{title} {artist}"
-                encoded_query = urllib.parse.quote_plus(search_query)
-                youtube_link = f"https://www.youtube.com/results?search_query={encoded_query}"
-                
-                st.markdown(f"**{i+1}. {title}** (by **{artist}**)")
-                st.markdown(f"**추천 이유**: {reason}")
-                st.markdown(f"[▶️ **YouTube에서 음악 듣기**]({youtube_link})")
-                st.markdown("---")
+            st.success("✅ 추천이 완료되었습니다!")
+            for i, rec in enumerate(result.get("recommendations", []
