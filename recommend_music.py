@@ -1,62 +1,83 @@
 import streamlit as st
-from groq import Groq
+import google.generativeai as genai  # 라이브러리 호출 방식 변경
 import os
 import json
 import urllib.parse
 
-# 1. API 클라이언트 초기화
+# 1. API 클라이언트 설정
 try:
-    # Streamlit Secrets에서 GROQ_API_KEY를 가져옵니다.
-    api_key = st.secrets.get("GROQ_API_KEY")
-    client = Groq(api_key=api_key)
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+    # 가장 범용적인 모델 설정
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception:
-    st.error("GROQ_API_KEY를 설정해주세요.")
+    st.error("API 키를 확인해주세요. Streamlit Secrets에 GEMINI_API_KEY가 필요합니다.")
     st.stop()
 
 def get_recommendation(age: int, preferred_genre: str, language_choice: str):
-    genre_prompt = preferred_genre if preferred_genre.strip() else "최신 인기곡"
+    genre_input = preferred_genre if preferred_genre.strip() else "최신 인기 차트 곡"
     
-    # Groq은 Llama 3 모델을 사용하며 JSON 모드를 지원합니다.
+    # AI에게 주는 지침 (정확도를 높이기 위해 페르소나 부여)
     prompt = f"""
-    당신은 음악 전문가입니다. {age}세 사용자에게 '{genre_prompt}' 관련 음악 3곡을 추천하세요.
-    반드시 JSON 형식으로만 응답하세요.
+    당신은 멜론, 스포티파이 데이터에 정통한 대한민국 최고의 음악 큐레이터입니다.
+    {age}세 사용자가 좋아하는 '{genre_input}' 스타일의 음악 3곡을 추천하세요.
     
+    [조건]
+    1. 각 곡마다 추천 이유를 반드시 {language_choice}로 상세하게 작성하세요.
+    2. 중복되지 않는 최신곡이나 명곡 위주로 선정하세요.
+    3. 반드시 아래 JSON 형식을 엄격히 지켜서 응답하세요. 다른 서술형 문장은 포함하지 마세요.
+
     JSON 형식:
     {{
       "recommendations": [
-        {{ "title": "곡 제목", "artist": "아티스트", "reason": "{language_choice}로 작성된 추천 이유" }}
+        {{ "title": "곡 제목", "artist": "아티스트", "reason": "상세한 추천 이유" }}
       ]
     }}
     """
     
     try:
-        chat_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile", # 고성능 무료 모델
-            response_format={"type": "json_object"}
+        # 안전한 호출 방식 (GenerationConfig 활용)
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                candidate_count=1,
+                temperature=0.8, # 창의적인 추천을 위해 약간 높임
+                response_mime_type="application/json" # JSON 출력 강제
+            )
         )
-        return json.loads(chat_completion.choices[0].message.content)
+        
+        return json.loads(response.text)
+        
     except Exception as e:
-        return {"error": f"Groq API 오류: {str(e)}"}
+        if "429" in str(e):
+            return {"error": "할당량 초과! 다른 구글 계정의 API 키로 교체해 주세요."}
+        return {"error": f"오류 발생: {str(e)}"}
 
-# --- UI 레이아웃 (기존과 동일) ---
-st.set_page_config(page_title="음악 추천 AI (Groq)", layout="centered")
-st.title("⚡ 초고속 AI 음악 추천")
+# --- UI 레이아웃 ---
+st.set_page_config(page_title="AI 음악 큐레이터", page_icon="🎵")
+st.title("🎶 맞춤형 AI 음악 추천")
+st.write(f"{age}세 취향 저격 음악을 추천해 드립니다.")
 
-age = st.number_input("나이:", min_value=1, max_value=100, value=25)
-genre = st.text_input("장르/가수:", value="")
-lang = st.selectbox("언어:", ["Korean", "English", "Japanese"])
+with st.sidebar:
+    st.header("설정")
+    age = st.slider("나이 선택", 10, 60, 25)
+    lang = st.selectbox("추천 이유 언어", ["Korean", "English", "Japanese"])
 
-if st.button("추천받기"):
-    with st.spinner("AI가 1초 만에 분석 중..."):
+genre = st.text_input("평소 즐겨 듣는 장르나 가수 (예: 아이브, 인디 밴드, 신나는 곡)", placeholder="입력하지 않으면 인기곡을 추천합니다.")
+
+if st.button("추천 받기 🎧", use_container_width=True):
+    with st.spinner("사용자님의 취향을 분석하고 있습니다..."):
         result = get_recommendation(age, genre, lang)
+        
         if "error" in result:
             st.error(result["error"])
         else:
-            for rec in result.get("recommendations", []):
-                st.subheader(f"{rec['title']} - {rec['artist']}")
-                st.write(f"**이유**: {rec['reason']}")
-                q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
-                st.markdown(f"[▶️ YouTube 검색](https://www.youtube.com/results?search_query={q})")
-                st.divider()
-
+            for i, rec in enumerate(result.get("recommendations", [])):
+                with st.container():
+                    st.subheader(f"{i+1}. {rec['title']} - {rec['artist']}")
+                    st.info(f"💡 **추천 이유**: {rec['reason']}")
+                    
+                    # 유튜브 링크 생성
+                    q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
+                    st.markdown(f"[▶️ 유튜브에서 바로 듣기](https://www.youtube.com/results?search_query={q})")
+                    st.divider()
