@@ -7,86 +7,71 @@ import urllib.parse
 
 # 1. API 클라이언트 초기화
 try:
-    # Streamlit Secrets 또는 환경 변수에서 키를 로드합니다.
     api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    # API 버전을 명시하지 않고 클라이언트를 생성합니다.
     client = genai.Client(api_key=api_key)
 except Exception:
-    st.error("API 키를 찾을 수 없습니다. Streamlit Cloud의 Settings > Secrets에서 GEMINI_API_KEY를 설정해주세요.")
+    st.error("API 키를 확인해주세요. Streamlit Secrets에 GEMINI_API_KEY가 등록되어 있어야 합니다.")
     st.stop()
 
 def get_recommendation(age: int, preferred_genre: str, language_choice: str):
-    genre_prompt = preferred_genre if preferred_genre.strip() else "현재 전 세계적으로 가장 인기 있는 음악"
+    genre_prompt = preferred_genre if preferred_genre.strip() else "최신 인기 팝송과 K-POP"
     
-    if language_choice == "선택 안 함":
-        lang_instruction = "추천 이유를 가장 적절한 언어로 작성해 주세요."
-    else:
-        lang_instruction = f"추천 이유를 반드시 {language_choice}어로 상세히 작성해 주세요."
-    
+    # 프롬프트 설정
     prompt = f"""
-    당신은 전문 음악 큐레이터입니다. {age}세 사용자를 위해 '{genre_prompt}' 관련 음악 3곡을 추천하고 {lang_instruction}
-    매번 버튼을 누를 때마다 새로운 곡을 추천하도록 노력하세요.
+    당신은 음악 전문가입니다. {age}세 사용자에게 '{genre_prompt}' 관련 음악 3곡을 추천하세요.
+    응답은 반드시 아래 JSON 형식만 반환하세요.
     
-    응답은 반드시 아래 JSON 스키마를 따르는 하나의 JSON 오브젝트여야 합니다. 
-    다른 텍스트를 포함하지 말고 오직 JSON만 반환하세요.
-    
-    JSON 스키마:
     {{
       "recommendations": [
-        {{
-          "title": "노래 제목",
-          "artist": "아티스트 이름",
-          "reason": "추천 이유"
-        }}
+        {{ "title": "곡 제목", "artist": "아티스트", "reason": "추천 이유({language_choice})" }}
       ]
     }}
     """
     
     try:
-        # 오류 해결의 핵심: 모델명을 'gemini-1.5-flash'로 명확히 설정합니다.
+        # 해결책: 모델 이름을 가장 단순한 'gemini-1.5-flash'로 입력합니다.
+        # 만약 이래도 404가 뜨면 'models/gemini-1.5-flash'로 바꿔보세요.
         response = client.models.generate_content(
             model='gemini-1.5-flash', 
             contents=prompt,
             config=types.GenerateContentConfig(
-                temperature=0.8
+                temperature=0.7
             )
         )
         
-        # JSON 응답 정제 (마크다운 코드 블록 제거)
-        raw_text = response.text.strip()
-        if '```json' in raw_text:
-            raw_text = raw_text.split('```json')[1].split('```')[0].strip()
-        elif '```' in raw_text:
-            raw_text = raw_text.split('```')[1].split('```')[0].strip()
-
-        return json.loads(raw_text)
+        # 결과 텍스트에서 JSON만 추출
+        res_text = response.text.strip()
+        if "```json" in res_text:
+            res_text = res_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in res_text:
+            res_text = res_text.split("```")[1].split("```")[0].strip()
+            
+        return json.loads(res_text)
         
     except Exception as e:
-        return {"error": f"추천을 가져오는 중 오류가 발생했습니다: {e}"}
+        # 에러 메시지를 더 자세히 출력하여 원인을 파악합니다.
+        return {"error": f"상세 오류: {str(e)}"}
 
-# --- 스트림릿 UI 레이아웃 ---
-st.set_page_config(page_title="🎶 AI 음악 추천 시스템", layout="centered")
-st.title("🎵 음악 추천 AI")
-st.markdown("나이와 선호 장르를 입력하고 추천 언어를 선택해 보세요.")
+# --- UI 레이아웃 ---
+st.set_page_config(page_title="음악 추천 AI", layout="centered")
+st.title("🎶 Gemini 1.5 음악 추천")
 
-age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
-genre = st.text_input("선호하는 음악 장르를 입력해 주세요 (빈 칸은 인기곡 추천):", value="")
+age = st.number_input("나이:", min_value=1, max_value=100, value=25)
+genre = st.text_input("선호 장르:", value="")
+lang = st.selectbox("언어:", ["Korean", "English", "Japanese"])
 
-language_list = ['Korean', 'English', 'Japanese', 'Chinese', '선택 안 함']
-selected_lang = st.selectbox("추천 결과를 보고 싶은 언어를 선택하세요:", options=language_list)
-
-if st.button("음악 추천받기 🌟"):
-    with st.spinner("AI가 음악을 고르는 중입니다..."):
-        data = get_recommendation(age, genre, selected_lang)
+if st.button("추천받기"):
+    with st.spinner("AI 분석 중..."):
+        result = get_recommendation(age, genre, lang)
         
-        if "error" in data:
-            st.error(data["error"])
+        if "error" in result:
+            st.error(result["error"])
+            st.info("💡 만약 404가 계속 뜨면, Google AI Studio에서 새 API 키를 받아보세요.")
         else:
-            st.success("✅ 추천 완료!")
-            for i, rec in enumerate(data.get("recommendations", [])):
-                st.markdown(f"### {i+1}. {rec['title']} - {rec['artist']}")
-                st.write(f"**추천 이유**: {rec['reason']}")
-                
-                # 유튜브 검색 링크
-                query = urllib.parse.quote_plus(f"{rec['title']} {rec['artist']}")
-                st.markdown(f"[▶️ YouTube에서 보기](https://www.youtube.com/results?search_query={query})")
+            for rec in result.get("recommendations", []):
+                st.subheader(f"{rec['title']} - {rec['artist']}")
+                st.write(rec['reason'])
+                q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
+                st.markdown(f"[YouTube 검색](https://www.youtube.com/results?search_query={q})")
                 st.divider()
