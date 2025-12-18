@@ -72,3 +72,4 @@ if st.button("음악 추천 받기 🎧", use_container_width=True):
                     st.markdown(f"[▶️ 유튜브에서 듣기](https://www.youtube.com/results?search_query={q})")
                     st.divider()
 
+
