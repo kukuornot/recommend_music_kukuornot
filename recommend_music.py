@@ -11,7 +11,7 @@ try:
     
     # [수정포인트] 모델 이름을 'models/' 없이 'gemini-1.5-flash'로만 설정
     # 라이브러리가 내부적으로 적절한 경로를 찾도록 합니다.
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-lastest')
 except Exception as e:
     st.error(f"초기화 오류: {e}")
     st.stop()
@@ -71,3 +71,4 @@ if st.button("음악 추천 받기 🎧", use_container_width=True):
                     q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
                     st.markdown(f"[▶️ 유튜브에서 듣기](https://www.youtube.com/results?search_query={q})")
                     st.divider()
+
