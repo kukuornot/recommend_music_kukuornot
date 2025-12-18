@@ -70,8 +70,8 @@ def get_recommendation(user_age, genre_choice):
 # --- UI 레이아웃 ---
 st.set_page_config(page_title="AI 음악 큐레이터", page_icon="🎧", layout="centered")
 
-st.title("🎧 연령별 장르 맞춤 추천 (2020-2025)")
-st.write(f"사용자의 나이와 장르 취향을 분석하여 최적의 음악을 제안합니다.")
+st.title("🎧맞춤형 음악 추천 (2020-2025)")
+st.write(f"사용자의 나이와 장르 취향을 분석하여 최적의 음악을 제안합니다.      \n(AI가 정확하지 않아 오류가 있을 수 있습니다.)")
 
 # 입력 섹션
 with st.sidebar:
@@ -116,3 +116,4 @@ if st.session_state.history:
             # 유튜브 링크
             q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
             st.link_button("▶️ 유튜브 검색 확인", f"https://www.youtube.com/results?search_query={q}")
+
