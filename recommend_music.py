@@ -5,25 +5,18 @@ import os
 import json
 import urllib.parse
 
-# Gemini 클라이언트 초기화
 try:
-    client = genai.Client()
+    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
 except Exception:
-    st.error("Gemini 클라이언트 초기화에 실패했습니다. 환경 변수 GEMINI_API_KEY가 설정되었는지 확인해 주세요.")
+    st.error("Gemini API 키를 설정해주세요. (로컬: 환경변수 / 배포: Streamlit Secrets)")
     st.stop()
-    
+
 def get_recommendation(age: int, preferred_genre: str, language_choice: str):
-    """나이, 장르, 언어 기반으로 Gemini API로부터 음악 추천을 받습니다."""
+    # 장르 미입력 시 인기곡으로 변경
+    genre_prompt = preferred_genre if preferred_genre.strip() else "전 세계적으로 실시간 인기가 많은 (Popular trending) 곡"
     
-    # --- 1. 프롬프트 조건 설정 ---
-    
-    # 1-1. 선호 장르가 없을 경우 인기곡 추천으로 변경
-    if not preferred_genre.strip():
-        genre_prompt = "전 세계적으로 실시간 인기가 많은 (Popular trending) 곡"
-    else:
-        genre_prompt = preferred_genre
-        
-    # 1-2. 언어 선택에 따른 추천 언어 설정
+    # 언어 설정
     if language_choice == "선택 안 함":
         language_instruction = "추천 이유를 언어에 구애받지 않고 가장 적절하다고 판단되는 언어(예: 한국어, 영어)로 작성해 주세요."
         output_language = "자유"
@@ -31,14 +24,13 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
         language_instruction = f"추천 이유를 {language_choice}어로 간결하게 설명해 주세요."
         output_language = language_choice
     
-    # --- 2. 모델에 전달할 프롬프트 작성 ---
-    
+    # 연속 추천 시 다양한 결과를 위해 temperature를 높게 설정할 것이므로 프롬프트 최적화
     prompt = f"""
     당신은 전문 음악 큐레이터입니다. 
     다음 사용자의 정보를 분석하여, 음악 3곡을 추천하고 {language_instruction}
+    매번 버튼을 누를 때마다 새로운 곡을 추천하도록 노력하세요.
     
     응답은 반드시 아래 JSON 스키마를 따르는 하나의 JSON 오브젝트여야 합니다. 
-    다른 설명이나 텍스트를 JSON 바깥에 포함하지 마세요.
     
     사용자 정보:
     - 나이: {age}세
@@ -57,95 +49,72 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
     }}
     """
     
-    # --- 3. API 호출 및 파싱 ---
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
-                temperature=0.7 
+                temperature=0.8 # 창의성을 높여 매번 다른 추천 유도
             )
         )
         
-        # JSON 응답 파싱
-        raw_text = response.text.strip()
-        if raw_text.startswith('```json'):
-            raw_text = raw_text[7:].strip()
-        if raw_text.endswith('```'):
-            raw_text = raw_text[:-3].strip()
-
+        raw_text = response.text.strip().replace('```json', '').replace('```', '')
         return json.loads(raw_text)
         
-    except json.JSONDecodeError:
-        return {"error": f"Gemini 응답을 JSON으로 처리하는 데 실패했습니다. 원본 응답의 일부: {response.text[:100]}..."}
     except Exception as e:
-        return {"error": f"API 호출 중 오류가 발생했습니다: {e}"}
+        return {"error": f"추천을 가져오는 중 오류가 발생했습니다: {e}"}
 
-# --- 4. Streamlit 앱 레이아웃 설정 ---
-
-st.set_page_config(page_title="🎶 AI 음악 추천 시스템", layout="centered")
+# --- UI 레이아웃 ---
+st.set_page_config(page_title="🎶 음악 추천 AI", layout="centered")
 st.title("🎵 음악 추천 AI")
 st.markdown("나이, 선호 장르를 입력하고 추천 언어를 선택하세요.")
 
-# 입력 폼
-with st.form("recommendation_form"):
-    
-    age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
-    
-    genre = st.text_input("선호하는 음악 장르를 입력해 주세요    \n(빈 칸은 실시간 인기곡 추천):", 
-                          value="")
-    
-    # 언어 선택 드롭다운 (선택 안 함 옵션 추가)
-    language_full_list = ['선택 안 함', 'Korean', 'English', 'Japanese', 'Chinese']
-    language_display = {
-        'Korean': 'Korean (한국어)', 
-        'English': 'English (영어)', 
-        'Japanese': 'Japanese (일본어)', 
-        'Chinese': 'Chinese (중국어)',
-        '선택 안 함': '선택 안 함'
-    }
-    
-    selected_language_key = st.selectbox(
-        "추천 결과를 보고 싶은 언어를 선택하세요:",
-        options=language_full_list,
-        format_func=lambda x: language_display[x]
-    )
-    
-    submitted = st.form_submit_button("음악 추천받기 🌟")
+# 입력 필드 섹션 (연속 추천을 위해 st.form을 사용하지 않음)
+age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
 
-# 버튼이 눌렸을 때 로직 실행
-if submitted:
-    with st.spinner("Gemini가 당신의 취향을 분석하고 음악을 고르는 중입니다..."):
+# 줄바꿈이 적용된 장르 입력창
+genre = st.text_input("선호하는 음악 장르를 입력해 주세요  \n(빈 칸은 실시간 인기곡 추천):", value="")
+
+language_full_list = ['선택 안 함', 'Korean', 'English', 'Japanese', 'Chinese']
+language_display = {
+    'Korean': 'Korean (한국어)', 
+    'English': 'English (영어)', 
+    'Japanese': 'Japanese (일본어)', 
+    'Chinese': 'Chinese (중국어)',
+    '선택 안 함': '선택 안 함'
+}
+
+selected_language_key = st.selectbox(
+    "추천 결과를 보고 싶은 언어를 선택하세요:",
+    options=language_full_list,
+    format_func=lambda x: language_display[x]
+)
+
+# 추천 버튼
+if st.button("음악 추천받기 🌟"):
+    with st.spinner("Gemini가 새로운 음악을 고르는 중입니다..."):
+        data = get_recommendation(age, genre, selected_language_key)
         
-        recommendation_data = get_recommendation(age, genre, selected_language_key)
-        
-        if "error" in recommendation_data:
-            st.error(recommendation_data["error"])
+        if "error" in data:
+            st.error(data["error"])
         else:
             st.success("✅ 추천 완료!")
             
-            # 장르가 비어있을 경우 헤더 변경
             if not genre.strip():
-                st.subheader("🔥 실시간 인기곡 기반 음악 추천 결과:")
+                st.subheader("🔥 실시간 인기곡 기반 추천 결과:")
             else:
-                st.subheader("🎧 당신만을 위한 음악 추천 결과:")
+                st.subheader("🎧 당신을 위한 맞춤 추천 결과:")
                 
-            
-            # 결과 출력 및 YouTube 링크 생성
-            for i, rec in enumerate(recommendation_data.get("recommendations", [])):
-                title = rec.get("title", "제목 없음")
-                artist = rec.get("artist", "아티스트 정보 없음")
-                reason = rec.get("reason", "추천 이유 없음")
+            for i, rec in enumerate(data.get("recommendations", [])):
+                st.markdown(f"### {i+1}. {rec['title']} - {rec['artist']}")
+                st.markdown(f"**추천 이유**: {rec['reason']}")
                 
-                # YouTube 검색어 생성 및 URL 인코딩
-                search_query = f"{title} {artist}"
+                # YouTube 링크 생성
+                search_query = f"{rec['title']} {rec['artist']}"
                 encoded_query = urllib.parse.quote_plus(search_query)
                 youtube_link = f"https://www.youtube.com/results?search_query={encoded_query}"
                 
-                st.markdown(f"**{i+1}. {title}** (by **{artist}**)")
-                st.markdown(f"**추천 이유**: {reason}")
-                st.markdown(f"[▶️ **YouTube에서 음악 듣기**]({youtube_link})")
-
-                st.markdown("---")
-
-
+                st.markdown(f"[▶️ YouTube에서 음악 듣기]({youtube_link})")
+                st.divider()
+            
+            st.info("💡 더 많은 추천을 원하시면 버튼을 다시 눌러보세요!")
