@@ -84,7 +84,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
 # --- 4. Streamlit 앱 레이아웃 설정 ---
 
 st.set_page_config(page_title="🎶 AI 음악 추천 시스템", layout="centered")
-st.title("🎵 개인화된 음악 추천 AI")
+st.title("🎵 취향 맞춤 음악 추천 AI")
 st.markdown("나이, 선호 장르를 입력하고 추천 언어를 선택하세요.")
 
 # 입력 폼
@@ -92,7 +92,7 @@ with st.form("recommendation_form"):
     
     age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
     
-    genre = st.text_input("선호하는 음악 장르를 입력해 주세요 (빈 칸은 실시간 인기곡 추천):", 
+    genre = st.text_input("선호하는 음악 장르를 입력해 주세요 \n(빈 칸은 실시간 인기곡 추천):", 
                           value="")
     
     # 언어 선택 드롭다운 (선택 안 함 옵션 추가)
@@ -145,4 +145,5 @@ if submitted:
                 st.markdown(f"**{i+1}. {title}** (by **{artist}**)")
                 st.markdown(f"**추천 이유**: {reason}")
                 st.markdown(f"[▶️ **YouTube에서 음악 듣기**]({youtube_link})")
+
                 st.markdown("---")
