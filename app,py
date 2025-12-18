@@ -1,0 +1,31 @@
+import streamlit as st
+from recommender import load_data, recommend
+from youtube import get_youtube_link
+
+st.set_page_config(page_title="AI Music Recommender", layout="centered")
+st.title("🎧 AI 음악 추천 (무료 AI 버전)")
+
+age = st.slider("나이", 10, 60, 20)
+
+genres = st.multiselect(
+    "선호 음악 장르",
+    ["kpop", "pop", "hiphop", "rock", "jazz", "edm"]
+)
+
+languages = st.multiselect(
+    "선호 언어",
+    ["korean", "english", "japanese", "spanish"]
+)
+
+if st.button("🎶 음악 추천받기"):
+    df = load_data()
+    results = recommend(age, genres, languages, df)
+
+    for _, row in results.iterrows():
+        yt = get_youtube_link(row["title"], row["artist"])
+
+        st.subheader(f"🎵 {row['title']} - {row['artist']}")
+        st.write(f"**추천 이유:** {row['mood']}")
+        if yt:
+            st.markdown(f"[▶ 유튜브에서 듣기]({yt})")
+        st.divider()
