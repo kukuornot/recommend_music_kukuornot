@@ -51,7 +51,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
     
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.0-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.8 # 창의성을 높여 매번 다른 추천 유도
@@ -118,4 +118,5 @@ if st.button("음악 추천받기 🌟"):
                 st.divider()
             
             st.info("💡 더 많은 추천을 원하시면 버튼을 다시 눌러보세요!")
+
 
