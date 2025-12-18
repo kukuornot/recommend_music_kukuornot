@@ -3,80 +3,101 @@ from openai import OpenAI
 import json
 import urllib.parse
 
-# 1. DeepSeek API 설정 (OpenAI 라이브러리 활용)
+# 1. API 설정 (DeepSeek 기반)
 try:
     api_key = st.secrets.get("DEEPSEEK_API_KEY")
-    client = OpenAI(
-        api_key=api_key, 
-        base_url="https://api.deepseek.com"
-    )
-except Exception as e:
-    st.error("DeepSeek API 키가 설정되지 않았습니다. Secrets를 확인해주세요.")
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+except Exception:
+    st.error("API 키 설정을 확인해주세요.")
     st.stop()
 
-def get_recommendation(user_age: int, preferred_genre: str, language_choice: str):
-    genre_input = preferred_genre if preferred_genre.strip() else "2024-2025 최신 인기 차트"
-    
-    # [강력한 지침] 팩트 체크 및 최신곡 강제
+# 2. 히스토리 관리를 위한 세션 상태
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "index" not in st.session_state:
+    st.session_state.index = -1
+
+def get_recommendation(user_age, preferred_genre):
+    # 중복 추천 방지 로직
+    past_songs = [rec['title'] for h in st.session_state.history for rec in h.get('recommendations', [])]
+    past_songs_str = ", ".join(past_songs[-15:]) 
+
+    # [수정] 최신곡 제한을 풀고 '음악적 가치'에 집중한 프롬프트
     prompt = f"""
-    당신은 대한민국 음악 데이터 전문가입니다. {user_age}세 사용자를 위해 '{genre_input}' 테마의 음악 3곡을 추천하세요.
+    당신은 전 시대를 아우르는 음악 박사입니다. {user_age}세 사용자에게 '{preferred_genre}'와 관련된 최고의 음악 3곡을 추천하세요.
     
-    [필수 규칙]
-    1. 반드시 2024년 말~2025년 초에 실제로 존재하는 '진짜' 곡만 추천하세요.
-    2. 아티스트와 곡 제목이 실제와 일치하는지 두 번 검토하세요. (예: 로제의 APT., 에스파의 Whiplash 등)
-    3. 존재하지 않는 곡을 지어내면 절대 안 됩니다.
-    4. 추천 이유는 {language_choice}로 작성하세요.
+    [가이드라인]
+    1. **시대 무관**: 90년대 명곡, 2010년대 인디, 혹은 아주 최근의 노래까지 모두 가능합니다.
+    2. **취향 저격**: 사용자의 나이대({user_age}세)를 고려하여 추억을 자극하거나 새로움을 줄 수 있는 곡을 선정하세요.
+    3. **중복 금지**: [{past_songs_str}]에 포함된 곡은 제외하세요.
+    4. **한국어 설명**: 추천 이유는 반드시 한국어로, 전문적이고 감성적으로 작성하세요.
     
-    반드시 아래 JSON 형식으로만 답변하세요:
+    JSON 형식:
     {{
       "recommendations": [
-        {{ "title": "정확한 곡 제목", "artist": "정확한 아티스트 이름", "reason": "추천 이유" }}
+        {{ "title": "곡 제목", "artist": "아티스트", "reason": "이 곡이 선정된 이유와 감상 포인트" }}
       ]
     }}
     """
     
     try:
         response = client.chat.completions.create(
-            model="deepseek-chat", # DeepSeek-V3
+            model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "You are a professional music curator. Output JSON only."},
+                {"role": "system", "content": "You are a legendary music curator who knows all eras. Output JSON."},
                 {"role": "user", "content": prompt}
             ],
             response_format={ "type": "json_object" },
-            temperature=0.1 # 사실 위주 답변을 위해 낮게 설정
+            temperature=0.8 # 더 창의적이고 다양한 시대의 곡을 위해 온도를 높임
         )
         return json.loads(response.choices[0].message.content)
     except Exception as e:
-        return {"error": f"API 호출 실패: {str(e)}"}
+        return {"error": str(e)}
 
-# --- UI 레이아웃 ---
-st.set_page_config(page_title="DeepSeek 음악 추천", page_icon="🎵", layout="centered")
+# --- UI 섹션 ---
+st.set_page_config(page_title="올타임 음악 큐레이터", page_icon="🎷")
+st.title("🎷 올타임 인생곡 큐레이션")
+st.write("시대를 불문하고 당신의 마음에 닿을 최고의 음악을 찾아드립니다.")
 
-st.title("🎵 AI 최신곡 큐레이션 (DeepSeek V3)")
-st.write("실시간 데이터 기반으로 정확한 최신곡만 추천합니다.")
+# 입력부
+with st.sidebar:
+    st.header("사용자 프로필")
+    age = st.number_input("나이:", 1, 100, 25)
+    genre = st.text_input("분위기/장르/아티스트:", placeholder="예: 비 오는 날 듣기 좋은, 올드스쿨 힙합, 유재하")
 
-with st.container(border=True):
-    age = st.number_input("사용자 나이:", min_value=1, max_value=100, value=25)
-    genre = st.text_input("선호 장르/가수:", placeholder="예: 2025년 아이돌 신곡, 신나는 팝송")
-    lang = st.selectbox("추천 이유 언어:", ["Korean", "English", "Japanese"])
-
-st.divider()
-
-if st.button("전문 AI 추천 받기 🚀", use_container_width=True):
-    with st.spinner("최신 음악 DB 검색 중..."):
-        result = get_recommendation(age, genre, lang)
-        
-        if "error" in result:
-            st.error(result["error"])
-            st.info("💡 잔액이 부족하거나 API 키가 올바르지 않을 수 있습니다.")
+# 새로운 추천 생성
+if st.button("음악 탐험 시작하기 🚀", use_container_width=True):
+    with st.spinner("당신을 위한 명곡을 선별 중..."):
+        new_res = get_recommendation(age, genre)
+        if "error" not in new_res:
+            st.session_state.history.append(new_res)
+            st.session_state.index = len(st.session_state.history) - 1
         else:
-            st.success("✅ 실제 차트 반영 추천 완료!")
-            for i, rec in enumerate(result.get("recommendations", [])):
-                with st.expander(f"{i+1}. {rec['title']} - {rec['artist']}", expanded=True):
-                    st.write(f"💬 **이유**: {rec['reason']}")
-                    
-                    # 유튜브 검색 버튼
-                    q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
-                    st.link_button("▶️ 유튜브에서 곡 확인하기", f"https://www.youtube.com/results?search_query={q}")
+            st.error("추천에 실패했습니다.")
 
-st.caption("Powered by DeepSeek-V3 | 2025 Music Database")
+# --- 히스토리 내비게이션 ---
+if st.session_state.history:
+    st.divider()
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        if st.button("⬅️ 이전 기록", disabled=(st.session_state.index <= 0)):
+            st.session_state.index -= 1
+            st.rerun()
+    with col2:
+        st.write(f"<center>{st.session_state.index + 1} / {len(st.session_state.history)}</center>", unsafe_allow_html=True)
+    with col3:
+        if st.button("다음 기록 ➡️", disabled=(st.session_state.index >= len(st.session_state.history) - 1)):
+            st.session_state.index += 1
+            st.rerun()
+
+    current_res = st.session_state.history[st.session_state.index]
+    
+    for i, rec in enumerate(current_res.get("recommendations", [])):
+        with st.container(border=True):
+            st.subheader(f"{rec['title']} - {rec['artist']}")
+            st.write(f"📖 {rec['reason']}")
+            
+            # 검색 및 감상 링크
+            q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
+            st.link_button("🎵 유튜브에서 감상하기", f"https://www.youtube.com/results?search_query={q}")
