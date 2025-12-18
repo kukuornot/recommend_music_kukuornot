@@ -8,21 +8,16 @@ import urllib.parse
 try:
     api_key = st.secrets.get("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
-    
-    # [수정 완료] lastest -> latest 로 오타 수정
-    # 혹은 가장 깔끔하게 'gemini-1.5-flash'만 적으셔도 됩니다.
-    model = genai.GenerativeModel('gemini-1.5-flash') 
 except Exception as e:
     st.error(f"초기화 오류: {e}")
     st.stop()
 
 def get_recommendation(user_age: int, preferred_genre: str, language_choice: str):
-    genre_input = preferred_genre if preferred_genre.strip() else "최신 인기 차트 곡"
+    genre_input = preferred_genre if preferred_genre.strip() else "최신 트렌디한 음악"
     
     prompt = f"""
-    당신은 대한민국 최고의 음악 큐레이터입니다.
-    {user_age}세 사용자가 좋아할 만한 '{genre_input}' 스타일의 음악 3곡을 추천하세요.
-    응답은 반드시 아래 JSON 형식이어야 합니다.
+    당신은 전문 음악 큐레이터입니다. {user_age}세 사용자에게 '{genre_input}' 관련 음악 3곡을 추천하세요.
+    응답은 반드시 아래 JSON 형식이어야 합니다. 다른 말은 하지 마세요.
     
     {{
       "recommendations": [
@@ -31,40 +26,47 @@ def get_recommendation(user_age: int, preferred_genre: str, language_choice: str
     }}
     """
     
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
-        return json.loads(response.text)
-    except Exception as e:
-        return {"error": str(e)}
+    # 시도할 모델 리스트 (2.0 먼저, 안되면 1.5)
+    models_to_try = ['gemini-2.0-flash-exp', 'gemini-1.5-flash']
+    
+    last_error = ""
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            last_error = str(e)
+            continue # 다음 모델로 시도
+            
+    return {"error": f"모든 모델 호출 실패. 마지막 오류: {last_error}"}
 
 # --- UI 레이아웃 ---
-st.set_page_config(page_title="AI 음악 큐레이터", page_icon="🎵")
-st.title("🎶 맞춤형 AI 음악 추천")
+st.set_page_config(page_title="AI 음악 추천 (Gemini 2.0)", page_icon="🎧")
+st.title("🎧 Gemini 2.0 음악 큐레이터")
 
-selected_age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
-genre = st.text_input("평소 즐겨 듣는 장르나 가수:", placeholder="예: 아이브, 재즈, 신나는 곡")
-lang = st.selectbox("추천 이유 언어:", ["Korean", "English", "Japanese"])
+selected_age = st.number_input("나이를 입력하세요:", min_value=1, max_value=100, value=25)
+genre = st.text_input("선호 장르/아티스트:", placeholder="예: 힙합, 아이브, 잔잔한 곡")
+lang = st.selectbox("추천 언어:", ["Korean", "English", "Japanese"])
 
 st.divider()
 
-if st.button("음악 추천 받기 🎧", use_container_width=True):
-    with st.spinner("AI가 음악을 분석 중입니다..."):
+if st.button("2.0 모델로 추천 받기 ✨", use_container_width=True):
+    with st.spinner("Gemini 2.0이 음악을 분석 중입니다..."):
         result = get_recommendation(selected_age, genre, lang)
         
         if "error" in result:
-            if "404" in result["error"]:
-                st.error("모델 이름 오타 또는 권한 문제입니다.")
-                st.info("💡 코드에서 'gemini-1.5-flash'로 정확히 입력했는지 확인해 보세요.")
-            else:
-                st.error(f"오류: {result['error']}")
+            st.error(result["error"])
+            st.info("💡 404가 뜬다면 아직 계정에 2.0 권한이 없는 것입니다. AI Studio에서 2.0 사용 설정을 확인하세요.")
         else:
+            st.success(f"✅ 추천 완료!")
             for i, rec in enumerate(result.get("recommendations", [])):
                 with st.container():
                     st.subheader(f"{i+1}. {rec['title']} - {rec['artist']}")
-                    st.info(f"💡 **추천 이유**: {rec['reason']}")
+                    st.write(f"**이유**: {rec['reason']}")
                     q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
-                    st.markdown(f"[▶️ 유튜브에서 듣기](https://www.youtube.com/results?search_query={q})")
+                    st.markdown(f"[▶️ 유튜브 검색](https://www.youtube.com/results?search_query={q})")
                     st.divider()
