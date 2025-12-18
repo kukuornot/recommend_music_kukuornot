@@ -46,34 +46,38 @@ def get_recommendation(user_age: int, preferred_genre: str, language_choice: str
     except Exception as e:
         return {"error": str(e)}
 
-# --- UI 레이아웃 (순서 교정됨) ---
+# --- UI 레이아웃 ---
 st.set_page_config(page_title="AI 음악 큐레이터", page_icon="🎵")
 st.title("🎶 맞춤형 AI 음악 추천")
 
-# 사이드바에서 변수를 먼저 정의
-with st.sidebar:
-    st.header("설정")
-    selected_age = st.slider("나이 선택", 10, 60, 25) # 여기서 age 정의
-    lang = st.selectbox("추천 이유 언어", ["Korean", "English", "Japanese"])
+# 1. 나이 입력 (슬라이더 대신 직접 입력창 사용)
+selected_age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
 
-# 정의된 변수를 아래에서 사용
-st.write(f"**{selected_age}세** 취향 저격 음악을 추천해 드립니다.")
-
+# 2. 장르 입력
 genre = st.text_input("평소 즐겨 듣는 장르나 가수 (예: 아이브, 재즈, 신나는 곡)", placeholder="입력하지 않으면 인기곡을 추천합니다.")
 
-if st.button("추천 받기 🎧", use_container_width=True):
-    with st.spinner("사용자님의 취향을 분석하고 있습니다..."):
+# 3. 언어 선택 (사이드바 또는 메인 화면)
+lang = st.selectbox("추천 이유 언어 선택:", ["Korean", "English", "Japanese"])
+
+st.write(f"---")
+st.write(f"✅ **{selected_age}세** 취향에 맞는 음악을 분석할 준비가 되었습니다.")
+
+# 추천 버튼
+if st.button("음악 추천 받기 🎧", use_container_width=True):
+    with st.spinner("사용자님의 취향을 분석하여 음악을 고르고 있습니다..."):
         result = get_recommendation(selected_age, genre, lang)
         
         if "error" in result:
             st.error(f"오류가 발생했습니다: {result['error']}")
-            st.info("💡 429 에러라면 API 할당량 문제이니 다른 구글 계정의 키를 사용해 보세요.")
+            st.info("💡 API 할당량 문제일 수 있습니다. 다른 API 키로 교체해 보세요.")
         else:
+            st.success("✅ 추천 결과가 도착했습니다!")
             for i, rec in enumerate(result.get("recommendations", [])):
                 with st.container():
                     st.subheader(f"{i+1}. {rec['title']} - {rec['artist']}")
                     st.info(f"💡 **추천 이유**: {rec['reason']}")
                     
+                    # 유튜브 링크 생성
                     q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
                     st.markdown(f"[▶️ 유튜브에서 바로 듣기](https://www.youtube.com/results?search_query={q})")
                     st.divider()
