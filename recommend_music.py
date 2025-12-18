@@ -92,7 +92,7 @@ with st.form("recommendation_form"):
     
     age = st.number_input("나이를 입력해 주세요:", min_value=1, max_value=100, value=25, step=1)
     
-    genre = st.text_input("선호하는 음악 장르를 입력해 주세요 ""\n(빈 칸은 실시간 인기곡 추천):", 
+    genre = st.text_input("선호하는 음악 장르를 입력해 주세요    \n(빈 칸은 실시간 인기곡 추천):", 
                           value="")
     
     # 언어 선택 드롭다운 (선택 안 함 옵션 추가)
@@ -147,4 +147,5 @@ if submitted:
                 st.markdown(f"[▶️ **YouTube에서 음악 듣기**]({youtube_link})")
 
                 st.markdown("---")
+
 
