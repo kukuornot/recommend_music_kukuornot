@@ -42,7 +42,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
 
 # --- UI 레이아웃 ---
 st.set_page_config(page_title="음악 추천 AI (OpenAI)", layout="centered")
-st.title("🎵 GPT-4o 기반 음악 추천")
+st.title("🎵 AI 기반 음악 추천")
 
 age = st.number_input("나이:", min_value=1, max_value=100, value=25)
 genre = st.text_input("선호 장르/가수:", value="")
@@ -61,3 +61,4 @@ if st.button("추천받기 ✨"):
                 q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
                 st.markdown(f"[▶️ YouTube 검색](https://www.youtube.com/results?search_query={q})")
                 st.divider()
+
