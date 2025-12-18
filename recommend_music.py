@@ -1,66 +1,44 @@
 import streamlit as st
 import google.generativeai as genai
 import os
-import json
-import urllib.parse
 
-# 1. API 클라이언트 설정
+# 1. API 클라이언트 설정 (가장 단순한 방식)
 try:
-    api_key = st.secrets.get("GEMINI_API_KEY")
+    api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
-    # 오직 Gemini 2.0 Flash 모델만 지정합니다.
-    model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    # 처음 잘 됐던 1.5-flash 모델로 고정
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
-    st.error(f"초기화 오류: {e}")
+    st.error("API 키 설정이 잘못되었습니다.")
     st.stop()
 
-def get_recommendation(user_age: int, preferred_genre: str, language_choice: str):
-    genre_input = preferred_genre if preferred_genre.strip() else "최신 트렌디한 음악"
-    
-    prompt = f"""
-    당신은 전문 음악 AI 큐레이터입니다. {user_age}세 사용자에게 '{genre_input}' 스타일의 음악 3곡을 추천하세요.
-    반드시 아래 JSON 형식으로만 답변하세요.
-    
-    {{
-      "recommendations": [
-        {{ "title": "곡 제목", "artist": "아티스트", "reason": "{language_choice}로 작성된 상세 이유" }}
-      ]
-    }}
-    """
-    
-    try:
-        # Gemini 2.0 모델을 사용하여 콘텐츠 생성
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
-        return json.loads(response.text)
-    except Exception as e:
-        # 에러 발생 시 다른 모델로 넘기지 않고 즉시 에러 메시지 반환
-        return {"error": f"Gemini 2.0 호출 실패: {str(e)}"}
-
 # --- UI 레이아웃 ---
-st.set_page_config(page_title="Gemini 2.0 음악 추천", page_icon="🎧")
-st.title("🎧 Gemini 2.0 전용 음악 큐레이터")
+st.title("🎶 음악 추천 AI")
+st.write("나이와 장르를 입력하면 음악을 추천해 드립니다.")
 
-selected_age = st.number_input("나이를 입력하세요:", min_value=1, max_value=100, value=25)
-genre = st.text_input("선호 장르/가수:", placeholder="예: 힙합, 아이브, 뉴진스")
-lang = st.selectbox("추천 이유 언어:", ["Korean", "English", "Japanese"])
+# 입력창
+age = st.number_input("나이:", min_value=1, max_value=100, value=25)
+genre = st.text_input("좋아하는 장르/가수:")
+
+if st.button("음악 추천받기"):
+    if not genre:
+        st.warning("장르를 입력해주세요!")
+    else:
+        with st.spinner("추천 중..."):
+            try:
+                # 처음 코드처럼 복잡한 설정 없이 프롬프트 전달
+                prompt = f"{age}세 사용자가 좋아할 만한 {genre} 음악 3곡을 추천하고 이유를 알려줘."
+                response = model.generate_content(prompt)
+                
+                # 결과 출력
+                st.success("✅ 추천 결과:")
+                st.write(response.text)
+                
+            except Exception as e:
+                if "429" in str(e):
+                    st.error("오늘 할당량이 끝났습니다. 내일 다시 시도하거나 새 API 키를 넣어주세요.")
+                else:
+                    st.error(f"오류 발생: {e}")
 
 st.divider()
-
-if st.button("2.0 모델로 추천 받기 🚀", use_container_width=True):
-    with st.spinner("Gemini 2.0 분석 중..."):
-        result = get_recommendation(selected_age, genre, lang)
-        
-        if "error" in result:
-            st.error(result["error"])
-        else:
-            st.success("✅ Gemini 2.0 추천 성공!")
-            for i, rec in enumerate(result.get("recommendations", [])):
-                with st.container():
-                    st.subheader(f"{i+1}. {rec['title']} - {rec['artist']}")
-                    st.info(f"💡 **추천 이유**: {rec['reason']}")
-                    q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
-                    st.markdown(f"[▶️ 유튜브에서 듣기](https://www.youtube.com/results?search_query={q})")
-                    st.divider()
+st.caption("제공: Gemini AI")
