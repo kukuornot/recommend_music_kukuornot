@@ -28,6 +28,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
     매번 버튼을 누를 때마다 새로운 곡을 추천하도록 노력하세요.
     
     응답은 반드시 아래 JSON 스키마를 따르는 하나의 JSON 오브젝트여야 합니다. 
+    다른 텍스트를 포함하지 말고 오직 JSON만 반환하세요.
     
     사용자 정보:
     - 나이: {age}세
@@ -46,7 +47,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
     """
     
     try:
-        # 모델명을 가장 기본 형식인 'gemini-1.5-flash'로 설정
+        # 모델명을 'gemini-1.5-flash'로 명확히 설정합니다.
         response = client.models.generate_content(
             model='gemini-1.5-flash', 
             contents=prompt,
@@ -55,7 +56,7 @@ def get_recommendation(age: int, preferred_genre: str, language_choice: str):
             )
         )
         
-        # JSON 응답 정제
+        # JSON 응답 정제 (마크다운 코드 블록 제거)
         raw_text = response.text.strip()
         if '```json' in raw_text:
             raw_text = raw_text.split('```json')[1].split('```')[0].strip()
