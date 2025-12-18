@@ -48,7 +48,7 @@ genre = st.text_input("장르/가수:", value="")
 lang = st.selectbox("언어:", ["Korean", "English", "Japanese"])
 
 if st.button("추천받기"):
-    with st.spinner("Groq AI가 1초 만에 분석 중..."):
+    with st.spinner("AI가 1초 만에 분석 중..."):
         result = get_recommendation(age, genre, lang)
         if "error" in result:
             st.error(result["error"])
@@ -59,3 +59,4 @@ if st.button("추천받기"):
                 q = urllib.parse.quote(f"{rec['title']} {rec['artist']}")
                 st.markdown(f"[▶️ YouTube 검색](https://www.youtube.com/results?search_query={q})")
                 st.divider()
+
